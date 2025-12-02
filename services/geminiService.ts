@@ -3,16 +3,40 @@ import { GoogleGenAI } from "@google/genai";
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const MODEL_NAME = "gemini-2.5-flash";
 
-export const getEncouragement = async (taskName: string, completedCount: number, totalCount: number): Promise<string> => {
+export const getEncouragement = async (
+  taskName: string, 
+  completedCount: number, 
+  totalCount: number,
+  actualMinutes?: number,
+  estimatedMinutes?: number,
+  reason?: string
+): Promise<string> => {
   try {
+    let context = `User just finished a homework task: "${taskName}". Progress: ${completedCount}/${totalCount} tasks done today.`;
+    
+    if (actualMinutes !== undefined && estimatedMinutes !== undefined) {
+      const diff = actualMinutes - estimatedMinutes;
+      if (diff < 0) {
+        context += ` They finished ${Math.abs(diff)} minutes EARLY. Efficiency is high.`;
+      } else if (diff > 0) {
+        context += ` They took ${diff} minutes LONGER than expected.`;
+      } else {
+        context += ` They finished exactly on time.`;
+      }
+    }
+
+    if (reason) {
+      context += ` User's reflection on why: "${reason}".`;
+    }
+
     const prompt = `
-      User just finished a homework task: "${taskName}".
-      Progress: ${completedCount}/${totalCount} tasks done today.
+      ${context}
       
       Generate a short, punchy, cheerful, single-sentence encouragement message in Chinese. 
       Use emojis. 
-      If they are halfway done, mention they are on a roll.
-      If they are all done, celebrate loudly.
+      If they finished early, praise their focus or speed.
+      If they finished late, acknowledge the effort and tell them it's okay, or praise their persistence.
+      If they provided a reason, try to acknowledge it subtly if possible.
     `;
 
     const response = await ai.models.generateContent({

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Task } from '../types';
-import { Trash2, AlertCircle, BrainCircuit } from 'lucide-react';
+import { Trash2, AlertCircle, BrainCircuit, CheckCheck } from 'lucide-react';
 
 interface TaskListProps {
   tasks: Task[];
@@ -32,27 +32,30 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onDelete, onCheck, urgentThr
           const hoursLeft = getTimeLeft(task.deadline);
           const isUrgent = !task.completed && hoursLeft < urgentThresholdHours && hoursLeft > 0;
           const isHard = task.difficulty >= 4 && task.estimatedMinutes >= 60;
+          
+          // Analysis logic for display
+          const diff = task.actualMinutes !== undefined ? task.actualMinutes - task.estimatedMinutes : 0;
 
           return (
             <div 
               key={task.id}
               className={`relative p-4 rounded-xl border transition-all ${
                 task.completed 
-                  ? 'bg-gray-50 border-gray-100 opacity-60' 
+                  ? 'bg-gray-50 border-gray-100' 
                   : isUrgent
                     ? 'bg-red-50 border-red-200 shadow-sm'
                     : 'bg-white border-gray-200 hover:shadow-md'
               }`}
             >
               <div className="flex items-start justify-between">
-                <div className="flex items-start space-x-3">
+                <div className="flex items-start space-x-3 w-full">
                   <input 
                     type="checkbox" 
                     checked={task.completed}
                     onChange={() => onCheck(task.id)}
-                    className="mt-1 w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300 cursor-pointer"
+                    className="mt-1 w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300 cursor-pointer shrink-0"
                   />
-                  <div>
+                  <div className="w-full">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                         task.completed ? 'bg-gray-200 text-gray-500' : 'bg-indigo-100 text-indigo-700'
@@ -65,12 +68,30 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onDelete, onCheck, urgentThr
                     </div>
                     
                     <div className="text-sm text-gray-500 mt-1 flex items-center gap-3 flex-wrap">
-                      <span>⏱ {task.estimatedMinutes}分钟</span>
+                      <span>⏱ 预计 {task.estimatedMinutes}m</span>
                       <span>⭐️ 难度 {task.difficulty}</span>
-                      <span className={`${isUrgent ? 'text-red-600 font-bold' : ''}`}>
-                         📅 {new Date(task.deadline).toLocaleTimeString('zh-CN', {month: 'numeric', day: 'numeric', hour:'2-digit', minute:'2-digit'})}
-                      </span>
+                      {!task.completed && (
+                        <span className={`${isUrgent ? 'text-red-600 font-bold' : ''}`}>
+                           📅 {new Date(task.deadline).toLocaleTimeString('zh-CN', {month: 'numeric', day: 'numeric', hour:'2-digit', minute:'2-digit'})}
+                        </span>
+                      )}
                     </div>
+
+                    {/* Completion Stats */}
+                    {task.completed && task.actualMinutes !== undefined && (
+                      <div className="mt-2 text-xs flex items-center gap-2 bg-indigo-50 p-2 rounded-lg border border-indigo-100 w-fit">
+                        <CheckCheck size={14} className="text-indigo-500" />
+                        <span className="text-gray-600">实际: <span className="font-bold">{task.actualMinutes}m</span></span>
+                        <span className={`font-medium ${diff < 0 ? 'text-green-600' : diff > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                          ({diff === 0 ? '准时' : diff < 0 ? `提前 ${Math.abs(diff)}m` : `延后 ${diff}m`})
+                        </span>
+                        {task.completionReason && (
+                          <span className="text-gray-400 border-l border-gray-300 pl-2 ml-1 italic max-w-[150px] truncate">
+                            "{task.completionReason}"
+                          </span>
+                        )}
+                      </div>
+                    )}
 
                     {/* AI Insights / Suggestions */}
                     {!task.completed && (

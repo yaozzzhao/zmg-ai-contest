@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Task, ScheduleItem } from './types';
 import TaskForm from './components/TaskForm';
 import TaskList from './components/TaskList';
 import ScheduleView from './components/ScheduleView';
 import ReflectionModal from './components/ReflectionModal';
+import TaskCompletionModal from './components/TaskCompletionModal';
 import { generateSchedule, checkSubjectBalance } from './services/schedulerService';
 import { getEncouragement, getDailyReflection } from './services/geminiService';
-import { Activity, BellRing, Trophy, MessageCircle } from 'lucide-react';
+import { Activity, Trophy, MessageCircle } from 'lucide-react';
 
 // Main App Component
 const App: React.FC = () => {
@@ -16,10 +17,13 @@ const App: React.FC = () => {
   const [aiMessage, setAiMessage] = useState<string | null>(null);
   const [balanceWarning, setBalanceWarning] = useState<string | null>(null);
   
-  // Reflection State
+  // Modal States
   const [isReflectionOpen, setIsReflectionOpen] = useState(false);
   const [reflectionAdvice, setReflectionAdvice] = useState<string | null>(null);
   const [isGeneratingAdvice, setIsGeneratingAdvice] = useState(false);
+
+  const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
+  const [taskToComplete, setTaskToComplete] = useState<Task | null>(null);
 
   // Load from LocalStorage
   useEffect(() => {
@@ -55,7 +59,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (tasks.length > 0 && tasks.every(t => t.completed) && !isReflectionOpen && !reflectionAdvice) {
        // Small delay to allow user to see the last check tick
-       const timer = setTimeout(() => setIsReflectionOpen(true), 1000);
+       const timer = setTimeout(() => setIsReflectionOpen(true), 1500);
        return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -78,22 +82,54 @@ const App: React.FC = () => {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
 
-    const newStatus = !task.completed;
-    
-    // Optimistic Update
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: newStatus } : t));
-
-    // Update Schedule items linked to this task
-    setSchedule(prev => prev.map(s => s.taskId === id ? { ...s, completed: newStatus } : s));
-
-    if (newStatus) {
-      // Trigger AI Encouragement
-      const completedCount = tasks.filter(t => t.completed).length + 1;
-      const msg = await getEncouragement(task.name, completedCount, tasks.length);
-      setAiMessage(msg);
-      // Clear message after 5 seconds
-      setTimeout(() => setAiMessage(null), 5000);
+    if (!task.completed) {
+      // Logic for completing a task: Open Modal
+      setTaskToComplete(task);
+      setIsCompletionModalOpen(true);
+    } else {
+      // Logic for un-completing a task: Direct update
+      const newStatus = false;
+      
+      setTasks(prev => prev.map(t => 
+        t.id === id ? { ...t, completed: newStatus, actualMinutes: undefined, completionReason: undefined } : t
+      ));
+      
+      setSchedule(prev => prev.map(s => s.taskId === id ? { ...s, completed: newStatus } : s));
     }
+  };
+
+  const handleConfirmCompletion = async (actualMinutes: number, reason: string) => {
+    if (!taskToComplete) return;
+
+    // 1. Update Task State
+    setTasks(prev => prev.map(t => 
+      t.id === taskToComplete.id 
+        ? { ...t, completed: true, actualMinutes, completionReason: reason } 
+        : t
+    ));
+
+    // 2. Update Schedule
+    setSchedule(prev => prev.map(s => 
+      s.taskId === taskToComplete.id ? { ...s, completed: true } : s
+    ));
+
+    // 3. Close Modal
+    setIsCompletionModalOpen(false);
+    setTaskToComplete(null);
+
+    // 4. Trigger AI Encouragement with extra context
+    const completedCount = tasks.filter(t => t.completed).length + 1;
+    const msg = await getEncouragement(
+      taskToComplete.name, 
+      completedCount, 
+      tasks.length,
+      actualMinutes,
+      taskToComplete.estimatedMinutes,
+      reason
+    );
+    
+    setAiMessage(msg);
+    setTimeout(() => setAiMessage(null), 6000);
   };
 
   const handleGenerateSchedule = () => {
@@ -107,7 +143,7 @@ const App: React.FC = () => {
   };
 
   const handleToggleScheduleItem = (itemId: string, taskId: string | null) => {
-    // If it's a real task, toggle the task itself
+    // If it's a real task, toggle the task itself via the main handler
     if (taskId) {
       handleCheckTask(taskId);
     } else {
@@ -126,52 +162,55 @@ const App: React.FC = () => {
 
   // --- Render ---
 
-  const completedMinutes = tasks.filter(t => t.completed).reduce((acc, t) => acc + t.estimatedMinutes, 0);
-  const totalMinutes = tasks.reduce((acc, t) => acc + t.estimatedMinutes, 0);
-  const progress = totalMinutes > 0 ? Math.round((completedMinutes / totalMinutes) * 100) : 0;
+  const completedMinutes = tasks.filter(t => t.completed).reduce((acc, t) => acc + (t.actualMinutes || t.estimatedMinutes), 0);
+  const totalEstimatedMinutes = tasks.reduce((acc, t) => acc + t.estimatedMinutes, 0);
+  // Calculate progress based on count or time? Let's use count for bar, time for text
+  const progressPercent = tasks.length > 0 ? Math.round((tasks.filter(t => t.completed).length / tasks.length) * 100) : 0;
 
   return (
-    <div className="min-h-screen pb-20 max-w-2xl mx-auto px-4 pt-6">
+    <div className="min-h-screen pb-20 max-w-2xl mx-auto px-4 pt-6 font-sans">
       {/* Header */}
       <header className="mb-8 text-center">
         <h1 className="text-3xl font-extrabold text-indigo-900 mb-2 tracking-tight">
           📚 作业时间管理教练
         </h1>
         <p className="text-gray-500 text-sm">
-          科学规划，高效学习，告别拖延
+          科学规划 · 智能记录 · 高效学习
         </p>
       </header>
 
       {/* Stats Bar (Sticky) */}
       <div className="sticky top-4 z-30 bg-white/90 backdrop-blur-md shadow-sm border border-indigo-100 rounded-xl p-4 mb-6 flex items-center justify-between">
         <div>
-          <div className="text-xs text-gray-500 uppercase font-semibold">今日进度</div>
+          <div className="text-xs text-gray-500 uppercase font-semibold">今日任务进度</div>
           <div className="text-xl font-bold text-indigo-600 flex items-center gap-2">
-            {progress}% 
-            <span className="text-sm font-normal text-gray-400">({completedMinutes}/{totalMinutes} min)</span>
+            {progressPercent}% 
+            <span className="text-sm font-normal text-gray-400">
+               (已学 {completedMinutes} min)
+            </span>
           </div>
         </div>
         <div className="w-1/3 h-2 bg-gray-100 rounded-full overflow-hidden">
           <div 
             className="h-full bg-indigo-500 transition-all duration-1000 ease-out" 
-            style={{ width: `${progress}%` }}
+            style={{ width: `${progressPercent}%` }}
           ></div>
         </div>
       </div>
 
       {/* AI Message Toast */}
       {aiMessage && (
-        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-4">
-          <div className="bg-indigo-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-2 text-sm font-medium">
-            <MessageCircle size={18} className="animate-bounce" />
-            {aiMessage}
+        <div className="fixed top-24 left-1/2 transform -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-4 w-11/12 max-w-md">
+          <div className="bg-indigo-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-start gap-3 text-sm font-medium border-2 border-indigo-400/30">
+            <MessageCircle size={20} className="shrink-0 mt-0.5" />
+            <span className="leading-snug">{aiMessage}</span>
           </div>
         </div>
       )}
 
       {/* Warnings */}
       {balanceWarning && (
-        <div className="mb-6 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl flex items-start gap-3 text-sm">
+        <div className="mb-6 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl flex items-start gap-3 text-sm animate-in fade-in">
           <Activity className="shrink-0 mt-0.5" size={18} />
           {balanceWarning}
         </div>
@@ -204,6 +243,17 @@ const App: React.FC = () => {
           onToggleScheduleItem={handleToggleScheduleItem} 
         />
       </main>
+
+      {/* Modals */}
+      <TaskCompletionModal
+        isOpen={isCompletionModalOpen}
+        task={taskToComplete}
+        onClose={() => {
+          setIsCompletionModalOpen(false);
+          setTaskToComplete(null);
+        }}
+        onConfirm={handleConfirmCompletion}
+      />
 
       <ReflectionModal 
         isOpen={isReflectionOpen} 

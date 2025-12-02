@@ -8,6 +8,8 @@ export interface Task {
   estimatedMinutes: number;
   completed: boolean;
   createdAt: number;
+  actualMinutes?: number;
+  completionReason?: string;
 }
 
 export interface ScheduleItem {

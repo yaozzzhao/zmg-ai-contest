@@ -8,8 +8,12 @@ export interface Task {
   estimatedMinutes: number;
   completed: boolean;
   createdAt: number;
+  
+  // New fields for actual tracking
   actualMinutes?: number;
-  completionReason?: string;
+  timeDiff?: number; // actual - estimated
+  completionReason?: string; // "Focused well", "Distracted", etc.
+  completedAt?: number; // Timestamp
 }
 
 export interface ScheduleItem {
@@ -30,4 +34,12 @@ export interface AnalysisResult {
   urgentCount: number;
   dominantSubject: string | null;
   dominantPercentage: number;
+}
+
+export interface DailyRecord {
+  date: string; // YYYY-MM-DD
+  tasks: Task[];
+  totalEstimated: number;
+  totalActual: number;
+  completedCount: number;
 }

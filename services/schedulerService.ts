@@ -16,7 +16,7 @@ export const calculatePriority = (task: Task): number => {
   
   // Weights
   const importanceWeight = 1.5;
-  const urgencyWeight = 1.2; // Higher urgency weight
+  const urgencyWeight = 2.0; // Increased urgency weight
   const difficultyWeight = 0.5;
 
   // Urgency score: 1 hour left = 100, 100 hours left = 1
@@ -31,8 +31,28 @@ export const calculatePriority = (task: Task): number => {
 
 // Generate Schedule
 export const generateSchedule = (tasks: Task[]): ScheduleItem[] => {
-  // 1. Filter incomplete tasks and sort by priority
-  const activeTasks = tasks.filter(t => !t.completed);
+  const now = new Date();
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+
+  // 1. Filter tasks
+  const activeTasks = tasks.filter(t => !t.completed).filter(t => {
+      const deadlineDate = new Date(t.deadline);
+      const isDueToday = deadlineDate.getTime() <= endOfToday.getTime();
+      const hoursUntil = (deadlineDate.getTime() - now.getTime()) / 36e5;
+      
+      // Rule: If deadline is overdue or due today, ALWAYS schedule it.
+      if (hoursUntil < 0 || isDueToday) return true;
+
+      // Rule: If deadline is within next 24 hours (e.g. tomorrow morning), schedule it.
+      if (hoursUntil < 24) return true;
+
+      // Rule: If deadline is far away (> 24h after end of today) AND Importance is high (5), schedule it.
+      if (t.importance >= 5) return true;
+
+      // Otherwise (e.g. due in 2 days and normal importance), skip for today's schedule.
+      return false;
+  });
+
   const sortedTasks = activeTasks.sort((a, b) => calculatePriority(b) - calculatePriority(a));
 
   const schedule: ScheduleItem[] = [];
@@ -42,28 +62,29 @@ export const generateSchedule = (tasks: Task[]): ScheduleItem[] => {
   const coeff = 1000 * 60 * 5;
   currentTime = new Date(Math.ceil(currentTime.getTime() / coeff) * coeff);
 
-  // Hard limit: 22:30 (10:30 PM)
+  // Soft limit: 23:00 (11:00 PM) - try to finish by then, but extend if needed for today's deadlines
   const today = new Date();
-  const endTimeLimit = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 22, 30, 0);
+  let endTimeLimit = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 0, 0);
+  
+  // If current time is already late, extend limit
+  if (currentTime.getTime() > endTimeLimit.getTime() - 3600000) {
+      endTimeLimit = new Date(currentTime.getTime() + 5 * 60 * 60 * 1000); // Add 5 hours buffer
+  }
 
   let consecutiveWorkMinutes = 0;
 
   for (const task of sortedTasks) {
-    if (currentTime.getTime() >= endTimeLimit.getTime()) break;
-
     let remainingTaskTime = task.estimatedMinutes;
     
-    // Split large tasks (> 45 mins) or fit into remaining timeline
+    // Check if task fits roughly
+    // We iterate through the task duration in blocks
     while (remainingTaskTime > 0) {
-      if (currentTime.getTime() >= endTimeLimit.getTime()) break;
-
-      // Determine block duration (max 40-45 mins for Pomodoro-ish feel)
-      const maxBlock = 40;
+      // Determine block duration (max 45 mins)
+      const maxBlock = 45;
       const blockDuration = Math.min(remainingTaskTime, maxBlock);
 
-      // Check if we need a break BEFORE this block?
-      // Simple logic: if we just worked > 40 mins, take a break
-      if (consecutiveWorkMinutes >= 40) {
+      // Check for break needs
+      if (consecutiveWorkMinutes >= 45) {
         const breakStart = new Date(currentTime);
         const breakDuration = 10;
         currentTime.setMinutes(currentTime.getMinutes() + breakDuration);
@@ -84,13 +105,17 @@ export const generateSchedule = (tasks: Task[]): ScheduleItem[] => {
       const taskStart = new Date(currentTime);
       currentTime.setMinutes(currentTime.getMinutes() + blockDuration);
       
+      const isSplit = remainingTaskTime > maxBlock || task.estimatedMinutes > maxBlock;
+      // Calculate split index if necessary (rough estimation)
+      const partInfo = isSplit 
+         ? ` (进行中)` 
+         : '';
+
       schedule.push({
         id: `schedule-${task.id}-${taskStart.getTime()}`,
         taskId: task.id,
         subject: task.subject,
-        name: remainingTaskTime > maxBlock 
-          ? `${task.name} (分段 ${Math.ceil((task.estimatedMinutes - remainingTaskTime) / maxBlock) + 1})` 
-          : task.name,
+        name: task.name + partInfo,
         startTime: formatTime(taskStart),
         endTime: formatTime(currentTime),
         isBreak: false,

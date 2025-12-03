@@ -1,5 +1,5 @@
 {
-  "name": "Homework Time Coach",
-  "description": "A smart homework planner that prioritizes tasks, generates schedules with breaks, and uses AI for encouragement and reflection.",
+  "name": "学时魔方",
+  "description": "基于AI的学习任务编排大师",
   "requestFramePermissions": []
 }

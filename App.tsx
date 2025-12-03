@@ -1,68 +1,103 @@
 import React, { useState, useEffect } from 'react';
-import { Task, ScheduleItem } from './types';
+import { Task, ScheduleItem, DailyRecord } from './types';
 import TaskForm from './components/TaskForm';
 import TaskList from './components/TaskList';
 import ScheduleView from './components/ScheduleView';
-import ReflectionModal from './components/ReflectionModal';
 import TaskCompletionModal from './components/TaskCompletionModal';
+import FocusModal from './components/FocusModal';
+import SummaryTable from './components/SummaryTable';
+import HistoryView from './components/HistoryView';
 import { generateSchedule, checkSubjectBalance } from './services/schedulerService';
-import { getEncouragement, getDailyReflection } from './services/geminiService';
-import { Activity, Trophy, MessageCircle } from 'lucide-react';
+import { getEncouragement } from './services/geminiService';
+import { Activity, MessageCircle, Trophy, RefreshCw, History } from 'lucide-react';
 
-// Main App Component
 const App: React.FC = () => {
-  // State
+  // --- State ---
   const [tasks, setTasks] = useState<Task[]>([]);
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
   const [balanceWarning, setBalanceWarning] = useState<string | null>(null);
+  const [history, setHistory] = useState<DailyRecord[]>([]);
+  const [view, setView] = useState<'today' | 'history'>('today');
   
-  // Modal States
-  const [isReflectionOpen, setIsReflectionOpen] = useState(false);
-  const [reflectionAdvice, setReflectionAdvice] = useState<string | null>(null);
-  const [isGeneratingAdvice, setIsGeneratingAdvice] = useState(false);
-
+  // Modal State
   const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
-  const [taskToComplete, setTaskToComplete] = useState<Task | null>(null);
+  const [isFocusModalOpen, setIsFocusModalOpen] = useState(false);
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
+
+  // App Lifecycle State
+  const [allCompleted, setAllCompleted] = useState(false);
+
+  // --- Effects ---
 
   // Load from LocalStorage
   useEffect(() => {
-    const savedTasks = localStorage.getItem('hw_coach_tasks');
-    if (savedTasks) {
-      setTasks(JSON.parse(savedTasks));
+    try {
+      const savedTasks = localStorage.getItem('hw_coach_tasks');
+      if (savedTasks) {
+        const parsedTasks = JSON.parse(savedTasks);
+        if (Array.isArray(parsedTasks)) {
+          setTasks(parsedTasks);
+          // If tasks exist and all are completed, show summary immediately
+          if (parsedTasks.length > 0 && parsedTasks.every((t: Task) => t.completed)) {
+            setAllCompleted(true);
+          }
+        }
+      }
+
+      const savedHistory = localStorage.getItem('hw_coach_history');
+      if (savedHistory) {
+          setHistory(JSON.parse(savedHistory));
+      }
+    } catch (e) {
+      console.error("Failed to load data", e);
     }
   }, []);
 
-  // Save to LocalStorage
+  // Save Tasks to LocalStorage
   useEffect(() => {
     localStorage.setItem('hw_coach_tasks', JSON.stringify(tasks));
   }, [tasks]);
 
-  // Check for alerts (deadlines & balance) periodically
+  // Save History to LocalStorage
   useEffect(() => {
-    const checkStatus = () => {
-      // Balance Check
-      const { dominantSubject, maxPercentage } = checkSubjectBalance(tasks);
-      if (dominantSubject && maxPercentage > 0.6) {
-        setBalanceWarning(`⚠️ 今天 ${dominantSubject} 的作业占比高达 ${(maxPercentage * 100).toFixed(0)}%，建议适当分散到明天哦。`);
-      } else {
-        setBalanceWarning(null);
-      }
-    };
+    localStorage.setItem('hw_coach_history', JSON.stringify(history));
+  }, [history]);
 
-    checkStatus();
-    const interval = setInterval(checkStatus, 300000); // 5 mins
-    return () => clearInterval(interval);
-  }, [tasks]);
-
-  // Check if all done for reflection
+  // Sync Schedule Status & Check Completion
   useEffect(() => {
-    if (tasks.length > 0 && tasks.every(t => t.completed) && !isReflectionOpen && !reflectionAdvice) {
-       // Small delay to allow user to see the last check tick
-       const timer = setTimeout(() => setIsReflectionOpen(true), 1500);
-       return () => clearTimeout(timer);
+    // 1. Sync Schedule
+    if (schedule.length > 0) {
+        setSchedule(prev => prev.map(item => {
+            if (item.taskId) {
+                const task = tasks.find(t => t.id === item.taskId);
+                return task ? { ...item, completed: task.completed } : item;
+            }
+            return item;
+        }));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    // 2. Check All Completed
+    if (tasks.length > 0 && tasks.every(t => t.completed)) {
+        if (!allCompleted) {
+            setAllCompleted(true);
+            setAiMessage("🎉 所有任务已完成！生成报告中...");
+        }
+    } else {
+        if (tasks.length > 0 && allCompleted) {
+             setAllCompleted(false);
+        } else if (tasks.length === 0) {
+             setAllCompleted(false);
+        }
+    }
+    
+    // 3. Balance Warning
+    const { dominantSubject, maxPercentage } = checkSubjectBalance(tasks);
+    if (dominantSubject && maxPercentage > 0.6) {
+        setBalanceWarning(`⚠️ 今天 ${dominantSubject} 的作业占比高达 ${(maxPercentage * 100).toFixed(0)}%，建议适当分散到明天哦。`);
+    } else {
+        setBalanceWarning(null);
+    }
   }, [tasks]);
 
 
@@ -70,7 +105,8 @@ const App: React.FC = () => {
 
   const handleAddTask = (newTask: Task) => {
     setTasks(prev => [...prev, newTask]);
-    setSchedule([]); // Reset schedule when tasks change
+    setSchedule([]); 
+    setAllCompleted(false);
   };
 
   const handleDeleteTask = (id: string) => {
@@ -78,139 +114,204 @@ const App: React.FC = () => {
     setSchedule(prev => prev.filter(s => s.taskId !== id));
   };
 
-  const handleCheckTask = async (id: string) => {
-    const task = tasks.find(t => t.id === id);
-    if (!task) return;
+  const handleTaskClick = (task: Task) => {
+    // When clicking task text, open completion modal directly (manual entry)
+    // We update the task to ensure no residual actualMinutes from previous cancelled states
+    const cleanTask = { ...task, actualMinutes: undefined }; 
+    setActiveTask(cleanTask);
+    setIsCompletionModalOpen(true);
+  };
 
-    if (!task.completed) {
-      // Logic for completing a task: Open Modal
-      setTaskToComplete(task);
-      setIsCompletionModalOpen(true);
-    } else {
-      // Logic for un-completing a task: Direct update
-      const newStatus = false;
-      
-      setTasks(prev => prev.map(t => 
-        t.id === id ? { ...t, completed: newStatus, actualMinutes: undefined, completionReason: undefined } : t
-      ));
-      
-      setSchedule(prev => prev.map(s => s.taskId === id ? { ...s, completed: newStatus } : s));
+  const handleFocusClick = (task: Task) => {
+    setActiveTask(task);
+    setIsFocusModalOpen(true);
+  };
+
+  const handleFocusComplete = (taskId: string, totalMinutes: number) => {
+    // Close focus modal
+    setIsFocusModalOpen(false);
+    
+    // Open completion modal, but pre-fill the time
+    if (activeTask && activeTask.id === taskId) {
+        const updatedTask = { ...activeTask, actualMinutes: totalMinutes };
+        setActiveTask(updatedTask);
+        
+        // Small delay to allow modal transition
+        setTimeout(() => {
+            setIsCompletionModalOpen(true);
+        }, 100);
     }
   };
 
-  const handleConfirmCompletion = async (actualMinutes: number, reason: string) => {
-    if (!taskToComplete) return;
-
-    // 1. Update Task State
-    setTasks(prev => prev.map(t => 
-      t.id === taskToComplete.id 
-        ? { ...t, completed: true, actualMinutes, completionReason: reason } 
-        : t
-    ));
-
-    // 2. Update Schedule
-    setSchedule(prev => prev.map(s => 
-      s.taskId === taskToComplete.id ? { ...s, completed: true } : s
-    ));
-
-    // 3. Close Modal
+  const handleConfirmCompletion = async (taskId: string, actualMinutes: number, reason: string) => {
     setIsCompletionModalOpen(false);
-    setTaskToComplete(null);
-
-    // 4. Trigger AI Encouragement with extra context
-    const completedCount = tasks.filter(t => t.completed).length + 1;
-    const msg = await getEncouragement(
-      taskToComplete.name, 
-      completedCount, 
-      tasks.length,
-      actualMinutes,
-      taskToComplete.estimatedMinutes,
-      reason
-    );
+    setActiveTask(null);
     
-    setAiMessage(msg);
-    setTimeout(() => setAiMessage(null), 6000);
+    // Update Task
+    setTasks(prev => prev.map(t => {
+        if (t.id === taskId) {
+            return {
+                ...t,
+                completed: true,
+                actualMinutes: actualMinutes,
+                completionReason: reason,
+                timeDiff: actualMinutes - t.estimatedMinutes,
+                completedAt: Date.now()
+            };
+        }
+        return t;
+    }));
+
+    // Trigger AI Encouragement
+    const task = tasks.find(t => t.id === taskId);
+    if (task) {
+        const completedCount = tasks.filter(t => t.completed).length + 1;
+        const msg = await getEncouragement(task.name, completedCount, tasks.length);
+        setAiMessage(msg);
+        setTimeout(() => setAiMessage(null), 5000);
+    }
   };
 
   const handleGenerateSchedule = () => {
     const newSchedule = generateSchedule(tasks);
     setSchedule(newSchedule);
-    
-    // Auto-scroll to schedule
     setTimeout(() => {
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
     }, 100);
   };
 
-  const handleToggleScheduleItem = (itemId: string, taskId: string | null) => {
-    // If it's a real task, toggle the task itself via the main handler
-    if (taskId) {
-      handleCheckTask(taskId);
-    } else {
-      // It's a break, just toggle locally in schedule
-      setSchedule(prev => prev.map(item => item.id === itemId ? { ...item, completed: !item.completed } : item));
-    }
-  };
+  const handleReset = () => {
+      if (window.confirm('确定要清空所有数据开始新的一天吗？(当前记录将自动保存到历史)')) {
+          
+          // 1. Prepare History Record
+          // Use current state 'tasks' which contains the completed items
+          const record: DailyRecord = {
+              date: new Date().toISOString().split('T')[0],
+              tasks: [...tasks],
+              totalEstimated: tasks.reduce((acc, t) => acc + t.estimatedMinutes, 0),
+              totalActual: tasks.reduce((acc, t) => acc + (t.actualMinutes || 0), 0),
+              completedCount: tasks.filter(t => t.completed).length
+          };
 
-  const handleReflectionSubmit = async (feeling: string) => {
-    setIsGeneratingAdvice(true);
-    const completedTasks = tasks.map(t => ({ name: t.name, estimated: t.estimatedMinutes }));
-    const advice = await getDailyReflection(completedTasks, feeling);
-    setReflectionAdvice(advice);
-    setIsGeneratingAdvice(false);
+          // 2. Update History State & LocalStorage Immediately
+          const newHistory = [...history];
+          // Check if today already exists, if so overwrite, else append
+          const existingIndex = newHistory.findIndex(r => r.date === record.date);
+          if (existingIndex >= 0) {
+              newHistory[existingIndex] = record;
+          } else {
+              newHistory.push(record);
+          }
+          
+          setHistory(newHistory);
+          localStorage.setItem('hw_coach_history', JSON.stringify(newHistory));
+
+          // 3. Reset App State
+          setTasks([]);
+          setSchedule([]);
+          setAllCompleted(false);
+          setAiMessage(null);
+          
+          // 4. Clear Tasks Storage Immediately
+          localStorage.setItem('hw_coach_tasks', '[]');
+          
+          // 5. Navigate
+          setView('today');
+      }
   };
 
   // --- Render ---
+  
+  if (view === 'history') {
+      return <HistoryView history={history} onBack={() => setView('today')} />;
+  }
 
-  const completedMinutes = tasks.filter(t => t.completed).reduce((acc, t) => acc + (t.actualMinutes || t.estimatedMinutes), 0);
-  const totalEstimatedMinutes = tasks.reduce((acc, t) => acc + t.estimatedMinutes, 0);
-  // Calculate progress based on count or time? Let's use count for bar, time for text
-  const progressPercent = tasks.length > 0 ? Math.round((tasks.filter(t => t.completed).length / tasks.length) * 100) : 0;
+  // 1. Summary View (All Completed)
+  if (allCompleted) {
+      return (
+          <div className="min-h-screen bg-gray-50 pb-20 pt-10 px-4">
+              <header className="mb-8 text-center relative">
+                 <button 
+                    onClick={() => setView('history')}
+                    className="absolute right-0 top-0 text-gray-400 hover:text-indigo-600 transition-colors"
+                  >
+                     <History size={24} />
+                  </button>
+                <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 mb-2 tracking-tight">
+                    学时魔方
+                </h1>
+                <p className="text-gray-500 text-sm">基于AI的学习任务编排大师</p>
+              </header>
+
+              <SummaryTable tasks={tasks} />
+
+              <div className="max-w-4xl mx-auto mt-10 flex justify-center pb-10">
+                  <button 
+                    onClick={handleReset}
+                    className="flex items-center gap-2 px-8 py-4 bg-white border border-gray-200 text-gray-700 font-bold rounded-2xl hover:bg-gray-50 hover:border-indigo-300 hover:text-indigo-600 shadow-sm transition-all active:scale-95 group"
+                  >
+                      <RefreshCw size={20} className="group-hover:rotate-180 transition-transform duration-500" />
+                      开始新的一天
+                  </button>
+              </div>
+          </div>
+      );
+  }
+
+  // 2. Main Workspace
+  const completedMinutes = tasks.filter(t => t.completed).reduce((acc, t) => acc + t.estimatedMinutes, 0);
+  const totalMinutes = tasks.reduce((acc, t) => acc + t.estimatedMinutes, 0);
+  const progress = totalMinutes > 0 ? Math.round((completedMinutes / totalMinutes) * 100) : 0;
 
   return (
-    <div className="min-h-screen pb-20 max-w-2xl mx-auto px-4 pt-6 font-sans">
+    <div className="min-h-screen pb-20 max-w-2xl mx-auto px-4 pt-6">
       {/* Header */}
-      <header className="mb-8 text-center">
-        <h1 className="text-3xl font-extrabold text-indigo-900 mb-2 tracking-tight">
-          📚 作业时间管理教练
+      <header className="mb-8 text-center relative">
+        <button 
+           onClick={() => setView('history')}
+           className="absolute right-2 top-2 p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-indigo-600 transition-colors"
+           title="历史记录"
+        >
+           <History size={24} />
+        </button>
+        <h1 className="text-3xl font-extrabold text-indigo-900 mb-2 tracking-tight flex items-center justify-center gap-2">
+           🧊 学时魔方
         </h1>
         <p className="text-gray-500 text-sm">
-          科学规划 · 智能记录 · 高效学习
+           基于AI的学习任务编排大师
         </p>
       </header>
 
       {/* Stats Bar (Sticky) */}
       <div className="sticky top-4 z-30 bg-white/90 backdrop-blur-md shadow-sm border border-indigo-100 rounded-xl p-4 mb-6 flex items-center justify-between">
         <div>
-          <div className="text-xs text-gray-500 uppercase font-semibold">今日任务进度</div>
+          <div className="text-xs text-gray-500 uppercase font-semibold">今日进度</div>
           <div className="text-xl font-bold text-indigo-600 flex items-center gap-2">
-            {progressPercent}% 
-            <span className="text-sm font-normal text-gray-400">
-               (已学 {completedMinutes} min)
-            </span>
+            {progress}% 
+            <span className="text-sm font-normal text-gray-400">({completedMinutes}/{totalMinutes} min)</span>
           </div>
         </div>
         <div className="w-1/3 h-2 bg-gray-100 rounded-full overflow-hidden">
           <div 
             className="h-full bg-indigo-500 transition-all duration-1000 ease-out" 
-            style={{ width: `${progressPercent}%` }}
+            style={{ width: `${progress}%` }}
           ></div>
         </div>
       </div>
 
       {/* AI Message Toast */}
       {aiMessage && (
-        <div className="fixed top-24 left-1/2 transform -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-4 w-11/12 max-w-md">
-          <div className="bg-indigo-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-start gap-3 text-sm font-medium border-2 border-indigo-400/30">
-            <MessageCircle size={20} className="shrink-0 mt-0.5" />
-            <span className="leading-snug">{aiMessage}</span>
+        <div className="fixed top-24 left-1/2 transform -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-4 w-full max-w-sm px-4">
+          <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-2xl shadow-xl flex items-center gap-3 text-sm font-medium">
+            <MessageCircle size={20} className="animate-bounce shrink-0" />
+            <span>{aiMessage}</span>
           </div>
         </div>
       )}
 
       {/* Warnings */}
       {balanceWarning && (
-        <div className="mb-6 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl flex items-start gap-3 text-sm animate-in fade-in">
+        <div className="mb-6 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl flex items-start gap-3 text-sm">
           <Activity className="shrink-0 mt-0.5" size={18} />
           {balanceWarning}
         </div>
@@ -223,7 +324,8 @@ const App: React.FC = () => {
         <TaskList 
           tasks={tasks} 
           onDelete={handleDeleteTask} 
-          onCheck={handleCheckTask} 
+          onTaskClick={handleTaskClick}
+          onFocusClick={handleFocusClick}
         />
 
         {tasks.length > 0 && (
@@ -238,29 +340,23 @@ const App: React.FC = () => {
           </div>
         )}
 
-        <ScheduleView 
-          schedule={schedule} 
-          onToggleScheduleItem={handleToggleScheduleItem} 
-        />
+        <ScheduleView schedule={schedule} />
       </main>
 
-      {/* Modals */}
-      <TaskCompletionModal
+      {/* Completion Modal */}
+      <TaskCompletionModal 
         isOpen={isCompletionModalOpen}
-        task={taskToComplete}
-        onClose={() => {
-          setIsCompletionModalOpen(false);
-          setTaskToComplete(null);
-        }}
+        onClose={() => setIsCompletionModalOpen(false)}
         onConfirm={handleConfirmCompletion}
+        task={activeTask}
       />
 
-      <ReflectionModal 
-        isOpen={isReflectionOpen} 
-        onClose={() => setIsReflectionOpen(false)}
-        onSubmit={handleReflectionSubmit}
-        aiAdvice={reflectionAdvice}
-        loading={isGeneratingAdvice}
+      {/* Focus Modal */}
+      <FocusModal
+        isOpen={isFocusModalOpen}
+        onClose={() => setIsFocusModalOpen(false)}
+        onComplete={handleFocusComplete}
+        task={activeTask}
       />
     </div>
   );

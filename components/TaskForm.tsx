@@ -74,12 +74,12 @@ const TaskForm: React.FC<TaskFormProps> = ({ onAddTask }) => {
           className="w-full p-4 flex items-center justify-center space-x-2 text-indigo-600 font-medium hover:bg-indigo-50 transition-colors"
         >
           <Plus size={20} />
-          <span>添加新作业</span>
+          <span>添加新任务</span>
         </button>
       ) : (
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="font-bold text-gray-700">录入新作业</h3>
+            <h3 className="font-bold text-gray-700">录入新任务</h3>
             <button 
               type="button" 
               onClick={() => setIsOpen(false)}
@@ -92,7 +92,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ onAddTask }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Subject & Name */}
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">科目</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">科目/类别</label>
               <select 
                 value={subject} 
                 onChange={(e) => setSubject(e.target.value)}
@@ -102,12 +102,12 @@ const TaskForm: React.FC<TaskFormProps> = ({ onAddTask }) => {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">作业内容</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">任务内容</label>
               <input 
                 type="text" 
                 value={name} 
                 onChange={(e) => setName(e.target.value)}
-                placeholder="例如：课本P20练习题"
+                placeholder="例如：完成项目报告"
                 required
                 className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
               />

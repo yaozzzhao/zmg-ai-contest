@@ -1,12 +1,13 @@
 import React from 'react';
 import { Task } from '../types';
-import { Trophy, Clock, Target, Calendar } from 'lucide-react';
+import { Trophy, Target, Calendar } from 'lucide-react';
 
 interface SummaryTableProps {
   tasks: Task[];
+  simpleMode?: boolean; // New prop to toggle header display
 }
 
-const SummaryTable: React.FC<SummaryTableProps> = ({ tasks }) => {
+const SummaryTable: React.FC<SummaryTableProps> = ({ tasks, simpleMode = false }) => {
   const totalEstimated = tasks.reduce((acc, t) => acc + t.estimatedMinutes, 0);
   const totalActual = tasks.reduce((acc, t) => acc + (t.actualMinutes || 0), 0);
   const totalDiff = totalActual - totalEstimated;
@@ -19,48 +20,55 @@ const SummaryTable: React.FC<SummaryTableProps> = ({ tasks }) => {
   });
 
   return (
-    <div className="animate-in slide-in-from-right duration-500 max-w-4xl mx-auto">
-      <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-indigo-100">
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-8 text-center text-white relative overflow-hidden">
-           {/* Decorative circles */}
-           <div className="absolute top-0 left-0 w-32 h-32 bg-white opacity-10 rounded-full -translate-x-10 -translate-y-10"></div>
-           <div className="absolute bottom-0 right-0 w-24 h-24 bg-white opacity-10 rounded-full translate-x-10 translate-y-10"></div>
+    <div className={`mx-auto ${simpleMode ? 'w-full' : 'max-w-4xl animate-in slide-in-from-right duration-500'}`}>
+      <div className={`bg-white overflow-hidden ${simpleMode ? '' : 'rounded-2xl shadow-xl border border-indigo-100'}`}>
+        
+        {/* Header - Only show if NOT in simple mode */}
+        {!simpleMode && (
+          <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-8 text-center text-white relative overflow-hidden">
+             <div className="absolute top-0 left-0 w-32 h-32 bg-white opacity-10 rounded-full -translate-x-10 -translate-y-10"></div>
+             <div className="absolute bottom-0 right-0 w-24 h-24 bg-white opacity-10 rounded-full translate-x-10 translate-y-10"></div>
 
-          <div className="mx-auto bg-white/20 w-16 h-16 rounded-full flex items-center justify-center mb-4 backdrop-blur-sm border border-white/20 shadow-inner">
-            <Trophy size={32} className="text-yellow-300" />
+            <div className="mx-auto bg-white/20 w-16 h-16 rounded-full flex items-center justify-center mb-4 backdrop-blur-sm border border-white/20 shadow-inner">
+              <Trophy size={32} className="text-yellow-300" />
+            </div>
+            <h2 className="text-3xl font-bold mb-2 tracking-tight">今日任务全部通关！</h2>
+            <div className="flex items-center justify-center gap-2 text-indigo-100 mb-2 opacity-90">
+               <Calendar size={16} />
+               <span className="font-medium">{todayStr}</span>
+            </div>
+            <p className="text-indigo-200 text-sm">你的学习效率分析报告已生成</p>
           </div>
-          <h2 className="text-3xl font-bold mb-2 tracking-tight">今日任务全部通关！</h2>
-          <div className="flex items-center justify-center gap-2 text-indigo-100 mb-2 opacity-90">
-             <Calendar size={16} />
-             <span className="font-medium">{todayStr}</span>
-          </div>
-          <p className="text-indigo-200 text-sm">你的学习效率分析报告已生成</p>
-        </div>
+        )}
 
-        <div className="grid grid-cols-3 gap-4 p-6 border-b border-gray-100">
-          <div className="text-center p-4 bg-indigo-50 rounded-xl">
+        {/* Stats Grid */}
+        <div className={`grid grid-cols-3 gap-4 p-6 ${simpleMode ? 'bg-gray-50/50' : 'border-b border-gray-100'}`}>
+          <div className="text-center p-3 md:p-4 bg-indigo-50 rounded-xl">
             <div className="text-gray-500 text-xs uppercase mb-1 font-semibold tracking-wide">预计总用时</div>
-            <div className="text-2xl font-bold text-indigo-700">{totalEstimated}<span className="text-sm font-normal text-indigo-400 ml-1">min</span></div>
+            <div className="text-xl md:text-2xl font-bold text-indigo-700">{totalEstimated}<span className="text-xs md:text-sm font-normal text-indigo-400 ml-1">min</span></div>
           </div>
-          <div className="text-center p-4 bg-purple-50 rounded-xl">
+          <div className="text-center p-3 md:p-4 bg-purple-50 rounded-xl">
             <div className="text-gray-500 text-xs uppercase mb-1 font-semibold tracking-wide">实际总用时</div>
-            <div className="text-2xl font-bold text-purple-700">{totalActual}<span className="text-sm font-normal text-purple-400 ml-1">min</span></div>
+            <div className="text-xl md:text-2xl font-bold text-purple-700">{totalActual}<span className="text-xs md:text-sm font-normal text-purple-400 ml-1">min</span></div>
           </div>
-          <div className="text-center p-4 bg-amber-50 rounded-xl">
+          <div className="text-center p-3 md:p-4 bg-amber-50 rounded-xl">
             <div className="text-gray-500 text-xs uppercase mb-1 font-semibold tracking-wide">总偏差</div>
-            <div className={`text-2xl font-bold ${totalDiff > 0 ? 'text-red-500' : 'text-green-500'}`}>
-              {totalDiff > 0 ? `+${totalDiff}` : totalDiff}<span className="text-sm font-normal ml-1">min</span>
+            <div className={`text-xl md:text-2xl font-bold ${totalDiff > 0 ? 'text-red-500' : 'text-green-500'}`}>
+              {totalDiff > 0 ? `+${totalDiff}` : totalDiff}<span className="text-xs md:text-sm font-normal ml-1">min</span>
             </div>
           </div>
         </div>
 
-        <div className="p-6">
-          <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <Target size={20} className="text-indigo-600" />
-            任务执行明细
-          </h3>
+        {/* Detailed Table */}
+        <div className="p-4 md:p-6">
+          {!simpleMode && (
+            <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <Target size={20} className="text-indigo-600" />
+              任务执行明细
+            </h3>
+          )}
           <div className="overflow-x-auto rounded-lg border border-gray-100">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse min-w-[600px]">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">科目/任务</th>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { DailyRecord } from '../types';
-import { CalendarDays, Trophy, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { CalendarDays, Trophy, Clock, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import SummaryTable from './SummaryTable';
 
 interface HistoryViewProps {
   history: DailyRecord[];
@@ -13,6 +14,13 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history, onBack }) => {
   const toggleExpand = (date: string) => {
     setExpandedDate(expandedDate === date ? null : date);
   };
+
+  // Sort by timestamp if available, otherwise fallback to date string comparison
+  const sortedHistory = [...history].sort((a, b) => {
+    const timeA = a.timestamp || new Date(a.date).getTime();
+    const timeB = b.timestamp || new Date(b.date).getTime();
+    return timeB - timeA;
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 pt-6 px-4">
@@ -30,14 +38,14 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history, onBack }) => {
         <div className="w-20"></div> {/* Spacer for centering */}
       </header>
 
-      {history.length === 0 ? (
+      {sortedHistory.length === 0 ? (
         <div className="text-center py-20 text-gray-400">
           <Trophy size={48} className="mx-auto mb-4 text-gray-300" />
           <p>还没有历史记录哦，完成今天的任务后再来吧！</p>
         </div>
       ) : (
-        <div className="space-y-4 max-w-2xl mx-auto">
-          {history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((record) => {
+        <div className="space-y-4 max-w-3xl mx-auto">
+          {sortedHistory.map((record) => {
             const isExpanded = expandedDate === record.date;
             const diff = record.totalActual - record.totalEstimated;
             
@@ -72,34 +80,20 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history, onBack }) => {
 
                 {isExpanded && (
                   <div className="border-t border-gray-100 bg-gray-50 p-4 animate-in slide-in-from-top-2">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-gray-500 text-left">
-                          <th className="pb-2 font-normal">任务</th>
-                          <th className="pb-2 font-normal text-center">实际/预计</th>
-                          <th className="pb-2 font-normal text-right">偏差</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {record.tasks.map(t => (
-                          <tr key={t.id}>
-                            <td className="py-2 text-gray-700">
-                                <div className="font-medium">{t.name}</div>
-                                <div className="text-xs text-gray-500">{t.completionReason}</div>
-                            </td>
-                            <td className="py-2 text-center text-gray-600">
-                                {t.actualMinutes} / {t.estimatedMinutes}
-                            </td>
-                            <td className={`py-2 text-right font-medium ${
-                                (t.actualMinutes || 0) > t.estimatedMinutes ? 'text-red-500' : 'text-green-600'
-                            }`}>
-                                {(t.actualMinutes || 0) - t.estimatedMinutes > 0 ? '+' : ''}
-                                {(t.actualMinutes || 0) - t.estimatedMinutes}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    {/* AI Summary Section */}
+                    {record.aiSummary && (
+                      <div className="mb-6 bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-xl border border-indigo-100">
+                        <div className="flex items-center gap-2 mb-2 text-indigo-800 font-semibold text-sm uppercase tracking-wide">
+                          <Sparkles size={16} />
+                          AI 每日总结
+                        </div>
+                        <p className="text-indigo-900 text-sm leading-relaxed">
+                          {record.aiSummary}
+                        </p>
+                      </div>
+                    )}
+                    
+                    <SummaryTable tasks={record.tasks} simpleMode={true} />
                   </div>
                 )}
               </div>

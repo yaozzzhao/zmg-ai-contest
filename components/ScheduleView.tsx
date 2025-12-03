@@ -78,7 +78,7 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({ schedule }) => {
       </div>
       
       <p className="text-center text-xs text-gray-400 mt-4">
-        请在上方「作业清单」中点击任务进行打卡，进度将自动同步至此
+        请在上方「任务清单」中点击任务进行打卡，进度将自动同步至此
       </p>
     </div>
   );

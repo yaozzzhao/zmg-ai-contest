@@ -38,8 +38,10 @@ export interface AnalysisResult {
 
 export interface DailyRecord {
   date: string; // YYYY-MM-DD
+  timestamp: number; // Unix timestamp for accurate sorting
   tasks: Task[];
   totalEstimated: number;
   totalActual: number;
   completedCount: number;
+  aiSummary?: string; // AI generated advice/summary for the day
 }

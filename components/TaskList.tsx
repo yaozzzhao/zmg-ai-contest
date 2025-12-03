@@ -14,7 +14,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onDelete, onTaskClick, onFoc
   if (tasks.length === 0) {
     return (
       <div className="text-center py-10 text-gray-400 bg-white rounded-xl border border-dashed border-gray-300">
-        <p>还没有作业哦，快去添加吧！🎉</p>
+        <p>还没有任务哦，快去添加吧！🎉</p>
       </div>
     );
   }
@@ -27,7 +27,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onDelete, onTaskClick, onFoc
 
   return (
     <div className="space-y-3 mb-8">
-      <h3 className="font-bold text-gray-700 pl-1 border-l-4 border-indigo-500 ml-1">作业清单 ({tasks.filter(t => !t.completed).length} 待办)</h3>
+      <h3 className="font-bold text-gray-700 pl-1 border-l-4 border-indigo-500 ml-1">任务清单 ({tasks.filter(t => !t.completed).length} 待办)</h3>
       <div className="grid grid-cols-1 gap-3">
         {tasks.map((task) => {
           const hoursLeft = getTimeLeft(task.deadline);

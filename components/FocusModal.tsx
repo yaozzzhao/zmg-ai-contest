@@ -22,7 +22,7 @@ const FocusModal: React.FC<FocusModalProps> = ({ isOpen, onClose, onComplete, ta
   // Track total actual work time (excluding breaks) in seconds
   const [totalWorkSeconds, setTotalWorkSeconds] = useState(0);
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Audio for timer end (simple beep)
   const playNotification = () => {

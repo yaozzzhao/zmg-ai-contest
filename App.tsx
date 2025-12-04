@@ -9,7 +9,8 @@ import HistoryView from './components/HistoryView';
 import DailySummaryModal from './components/DailySummaryModal';
 import { generateSchedule, checkSubjectBalance } from './services/schedulerService';
 import { getEncouragement, generateDailySummary } from './services/geminiService';
-import { Activity, MessageCircle, Trophy, History } from 'lucide-react';
+import { getTestData } from './services/testData';
+import { Activity, MessageCircle, Trophy, History, FlaskConical } from 'lucide-react';
 
 // Helper for safe localStorage loading
 const safeLoad = <T,>(key: string, fallback: T): T => {
@@ -178,6 +179,17 @@ const App: React.FC = () => {
     }, 100);
   };
 
+  const handleLoadDemoData = () => {
+      if (tasks.length > 0) {
+          if (!window.confirm('加载测试数据将覆盖当前任务，确定吗？')) return;
+      }
+      const data = getTestData();
+      setTasks(data);
+      setSchedule([]);
+      setAiMessage("🧪 测试数据已加载，快试试生成计划吧！");
+      setTimeout(() => setAiMessage(null), 3000);
+  };
+
   // Archive current tasks to history and reset
   const handleArchiveAndReset = () => {
     const record: DailyRecord = {
@@ -218,6 +230,13 @@ const App: React.FC = () => {
     <div className="min-h-screen pb-20 max-w-2xl mx-auto px-4 pt-6">
       {/* Header */}
       <header className="mb-8 text-center relative">
+        <button 
+            onClick={handleLoadDemoData}
+            className="absolute right-14 top-2 p-2 rounded-full hover:bg-gray-100 text-gray-300 hover:text-indigo-600 transition-colors"
+            title="生成测试数据 (Demo)"
+        >
+            <FlaskConical size={22} />
+        </button>
         <button 
            onClick={() => setView('history')}
            className="absolute right-2 top-2 p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-indigo-600 transition-colors"
